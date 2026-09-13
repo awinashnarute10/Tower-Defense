@@ -36,7 +36,11 @@ export class WebGLRenderer {
       backgroundColor: 0x0a0812,
       antialias: false,
       resolution: Math.min(2, window.devicePixelRatio || 1),
-      autoDensity: true,
+      // autoDensity would set an inline canvas.style.width/height in fixed
+      // px, which beats our `w-full h-full` class and lets the canvas
+      // overflow its (often narrower, sidebar-shrunk) container instead of
+      // scaling to fit it — same responsive-sizing approach as CanvasRenderer.
+      autoDensity: false,
       preference: 'webgl',
       autoStart: false, // we drive rendering from the same GameLoop as Canvas2D — one render loop, not two.
     })
