@@ -228,32 +228,31 @@ export class GameEngine {
 
   _maintainStressPopulation() {
     const { enemies, projectiles } = this.stressConfig
+    const grunt = ENEMY_TEMPLATES.grunt
     let guard = 0
     while (this.enemyPool.activeCount < enemies && guard++ < 200) {
-      const typeId = 'grunt'
-      const template = ENEMY_TEMPLATES[typeId]
       const { x, y, waypointIndex } = pointAtProgress(Math.random())
-      const index = this.enemyPool.acquire({ typeId, template, x, y, hp: template.hp, speed: template.speed })
+      const index = this.enemyPool.acquire('grunt', grunt, x, y, grunt.hp, grunt.speed)
       if (index >= 0) this.enemyPool.get(index).waypointIndex = waypointIndex
     }
     guard = 0
+    // Any currently-active slot works as a dummy target — index straight into
+    // the pool's active list (O(1)) instead of scanning it (this ran up to
+    // 200x/frame, so an O(n) scan here was up to ~200 * activeCount wasted
+    // iterations per frame at full stress-test population).
     while (this.projectilePool.activeCount < projectiles && this.enemyPool.activeCount > 0 && guard++ < 200) {
-      let targetIndex = -1
-      this.enemyPool.forEachActive((_e, idx) => {
-        if (targetIndex === -1) targetIndex = idx
-      })
-      if (targetIndex === -1) break
+      const targetIndex = this.enemyPool.activeIndices[0]
       const target = this.enemyPool.get(targetIndex)
-      this.projectilePool.acquire({
-        x: target.x + (Math.random() - 0.5) * 200,
-        y: target.y + (Math.random() - 0.5) * 200,
-        speed: 700,
-        damage: 0,
-        kind: 'single',
-        color: '#4cf3ff',
-        targetId: targetIndex,
-        targetGeneration: this.enemyPool.generations[targetIndex],
-      })
+      this.projectilePool.acquire(
+        target.x + (Math.random() - 0.5) * 200,
+        target.y + (Math.random() - 0.5) * 200,
+        700,
+        0,
+        'single',
+        '#4cf3ff',
+        targetIndex,
+        this.enemyPool.generations[targetIndex]
+      )
     }
   }
 
@@ -321,19 +320,19 @@ export class GameEngine {
 
   spawnProjectile(tower, targetIndex) {
     const generation = this.enemyPool.generations[targetIndex]
-    this.projectilePool.acquire({
-      x: tower.x,
-      y: tower.y,
-      speed: PROJECTILE_SPEED[tower.kind] ?? 700,
-      damage: tower.damage,
-      kind: tower.kind,
-      color: tower.projectileColor,
-      targetId: targetIndex,
-      targetGeneration: generation,
-      slow: tower.slow,
-      slowDuration: tower.slowDuration,
-      splashRadius: tower.splashRadius,
-    })
+    this.projectilePool.acquire(
+      tower.x,
+      tower.y,
+      PROJECTILE_SPEED[tower.kind] ?? 700,
+      tower.damage,
+      tower.kind,
+      tower.projectileColor,
+      targetIndex,
+      generation,
+      tower.slow,
+      tower.slowDuration,
+      tower.splashRadius
+    )
   }
 }
 

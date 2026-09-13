@@ -67,7 +67,14 @@ export class GameRenderer {
     this.background = bakeBackground()
     this.sprites = new SpriteCache()
     this.hoverCol = -1
-    this._visibleProjectiles = []
+    // Reusable per-type/per-color bucket arrays for batched drawing (see
+    // _drawEnemies/_drawProjectiles): grouping same-sprite draws together
+    // means the sprite is looked up once per type/color instead of once per
+    // entity, and keeps same-source drawImage calls consecutive instead of
+    // interleaved, which is friendlier to the browser's internal texture cache.
+    this._enemyBuckets = {}
+    for (const typeId in ENEMY_BITMAP) this._enemyBuckets[typeId] = []
+    this._projectileBuckets = new Map()
   }
 
   render(ctx, engine) {
@@ -144,75 +151,114 @@ export class GameRenderer {
 
   _drawEnemies(ctx, engine) {
     const { enemyPool, simTime, flags } = engine
-    enemyPool.forEachActive((enemy) => {
-      if (enemy.x < -60 || enemy.x > MAP_WIDTH + 60 || enemy.y < -60 || enemy.y > MAP_HEIGHT + 60) return
+    const buckets = this._enemyBuckets
+    for (const typeId in buckets) buckets[typeId].length = 0
 
-      const size = enemy.radius * 2.6
-      // Snap to whole pixels: fits the pixel-art look and lets the browser do a
-      // cheaper unfiltered blit instead of resampling a sub-pixel-positioned sprite.
-      const drawX = Math.round(enemy.x - size / 2)
-      const drawY = Math.round(enemy.y - size / 2)
-      if (flags.spriteCache) {
-        const bitmapKey = ENEMY_BITMAP[enemy.typeId]
-        const sprite = this.sprites.getEnemySprite(enemy.typeId, bitmapKey, enemy.color, enemy.outline)
-        ctx.drawImage(sprite, drawX, drawY, size, size)
-      } else {
-        // Baseline path: rebuild a fresh gradient and stroke every entity every
-        // frame instead of blitting a pre-baked sprite — the cost the cache avoids.
-        const gradient = ctx.createRadialGradient(enemy.x, enemy.y, 0, enemy.x, enemy.y, size / 2)
-        gradient.addColorStop(0, enemy.color)
-        gradient.addColorStop(1, enemy.outline)
-        ctx.fillStyle = gradient
-        ctx.beginPath()
-        ctx.arc(enemy.x, enemy.y, size / 2, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.strokeStyle = enemy.outline
-        ctx.lineWidth = 2
-        ctx.stroke()
-      }
+    // Pass 1: raw indexed loop (not forEachActive(callback) — this is the
+    // hottest loop in the renderer at up to ~5000 entities) that culls
+    // off-screen enemies and sorts the rest into per-type buckets.
+    const { items, activeIndices, activeCount } = enemyPool
+    for (let i = 0; i < activeCount; i++) {
+      const enemy = items[activeIndices[i]]
+      if (enemy.x < -60 || enemy.x > MAP_WIDTH + 60 || enemy.y < -60 || enemy.y > MAP_HEIGHT + 60) continue
+      buckets[enemy.typeId].push(enemy)
+    }
 
-      if (simTime < enemy.hitFlashUntil) {
-        ctx.globalAlpha = 0.55
-        ctx.fillStyle = '#ffffff'
-        ctx.beginPath()
-        ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.globalAlpha = 1
-      }
+    // Pass 2: draw one type at a time. All enemies of a type share one
+    // sprite, so it's looked up once per type (≤5 lookups) instead of once
+    // per entity (≤5000), and every drawImage in a batch shares the same
+    // source image instead of the source jumping around between entities.
+    for (const typeId in buckets) {
+      const bucket = buckets[typeId]
+      if (bucket.length === 0) continue
+      const bitmapKey = ENEMY_BITMAP[typeId]
+      const first = bucket[0]
+      const sprite = flags.spriteCache ? this.sprites.getEnemySprite(typeId, bitmapKey, first.color, first.outline) : null
 
-      // Skip the HP bar entirely at full health — avoids two fillRect calls per
-      // untouched enemy, which matters when thousands are on screen at once.
-      if (enemy.hp < enemy.maxHp) {
-        const barW = size
-        const pct = Math.max(0, enemy.hp / enemy.maxHp)
-        ctx.fillStyle = '#1c1630'
-        ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW, 4)
-        ctx.fillStyle = pct > 0.5 ? '#4cff6a' : pct > 0.2 ? '#ffe14c' : '#ff4c5c'
-        ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW * pct, 4)
+      for (let i = 0; i < bucket.length; i++) {
+        const enemy = bucket[i]
+        const size = enemy.radius * 2.6
+        if (flags.spriteCache) {
+          // Snap to whole pixels: fits the pixel-art look and lets the browser
+          // do a cheaper unfiltered blit instead of resampling a sub-pixel
+          // sprite position.
+          ctx.drawImage(sprite, Math.round(enemy.x - size / 2), Math.round(enemy.y - size / 2), size, size)
+        } else {
+          // Baseline path: rebuild a fresh gradient and stroke every entity
+          // every frame instead of blitting a pre-baked sprite — the cost
+          // the cache (and this batching) avoids.
+          const gradient = ctx.createRadialGradient(enemy.x, enemy.y, 0, enemy.x, enemy.y, size / 2)
+          gradient.addColorStop(0, enemy.color)
+          gradient.addColorStop(1, enemy.outline)
+          ctx.fillStyle = gradient
+          ctx.beginPath()
+          ctx.arc(enemy.x, enemy.y, size / 2, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = enemy.outline
+          ctx.lineWidth = 2
+          ctx.stroke()
+        }
+
+        if (simTime < enemy.hitFlashUntil) {
+          ctx.globalAlpha = 0.55
+          ctx.fillStyle = '#ffffff'
+          ctx.beginPath()
+          ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.globalAlpha = 1
+        }
+
+        // Skip the HP bar entirely at full health — avoids two fillRect calls
+        // per untouched enemy, which matters when thousands are on screen.
+        if (enemy.hp < enemy.maxHp) {
+          const barW = size
+          const pct = Math.max(0, enemy.hp / enemy.maxHp)
+          ctx.fillStyle = '#1c1630'
+          ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW, 4)
+          ctx.fillStyle = pct > 0.5 ? '#4cff6a' : pct > 0.2 ? '#ffe14c' : '#ff4c5c'
+          ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW * pct, 4)
+        }
       }
-    })
+    }
   }
 
   _drawProjectiles(ctx, engine) {
     const { projectilePool } = engine
-    // Single pass: one batched trail path (one stroke call for every projectile)
-    // plus the sprite blits, instead of iterating the pool twice.
+    const buckets = this._projectileBuckets
+    for (const bucket of buckets.values()) bucket.length = 0
+
+    // Pass 1: one batched trail path (a single stroke() call for every
+    // projectile) plus sorting visible projectiles into per-color buckets —
+    // raw indexed loop, not forEachActive(callback), for the same reason as
+    // the enemy loop above.
     ctx.beginPath()
-    const toDraw = this._visibleProjectiles
-    toDraw.length = 0
-    projectilePool.forEachActive((p) => {
+    const { items, activeIndices, activeCount } = projectilePool
+    for (let i = 0; i < activeCount; i++) {
+      const p = items[activeIndices[i]]
       ctx.moveTo(p.trailX, p.trailY)
       ctx.lineTo(p.x, p.y)
-      if (p.x >= -20 && p.x <= MAP_WIDTH + 20 && p.y >= -20 && p.y <= MAP_HEIGHT + 20) toDraw.push(p)
-    })
+      if (p.x >= -20 && p.x <= MAP_WIDTH + 20 && p.y >= -20 && p.y <= MAP_HEIGHT + 20) {
+        let bucket = buckets.get(p.color)
+        if (!bucket) {
+          bucket = []
+          buckets.set(p.color, bucket)
+        }
+        bucket.push(p)
+      }
+    }
     ctx.strokeStyle = 'rgba(255,255,255,0.35)'
     ctx.lineWidth = 2
     ctx.stroke()
 
-    for (let i = 0; i < toDraw.length; i++) {
-      const p = toDraw[i]
-      const sprite = this.sprites.getProjectileSprite(p.color)
-      ctx.drawImage(sprite, Math.round(p.x - 8), Math.round(p.y - 8), 16, 16)
+    // Pass 2: one sprite lookup per color (there are only a handful of
+    // projectile colors, one per tower type), all same-source blits grouped.
+    for (const [color, bucket] of buckets) {
+      if (bucket.length === 0) continue
+      const sprite = this.sprites.getProjectileSprite(color)
+      for (let i = 0; i < bucket.length; i++) {
+        const p = bucket[i]
+        ctx.drawImage(sprite, Math.round(p.x - 8), Math.round(p.y - 8), 16, 16)
+      }
     }
   }
 

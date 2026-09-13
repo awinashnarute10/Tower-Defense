@@ -15,10 +15,10 @@ export class ProjectilePool {
     this.slotPosition = new Int32Array(capacity).fill(-1)
   }
 
-  acquire(config) {
+  acquire(x, y, speed, damage, kind, color, targetId, targetGeneration, slow, slowDuration, splashRadius) {
     if (this.freeTop === 0) return -1
     const index = this.freeList[--this.freeTop]
-    this.items[index].reset(config)
+    this.items[index].reset(x, y, speed, damage, kind, color, targetId, targetGeneration, slow, slowDuration, splashRadius)
     const pos = this.activeCount++
     this.activeIndices[pos] = index
     this.slotPosition[index] = pos

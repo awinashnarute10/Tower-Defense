@@ -13,6 +13,11 @@ export default function GameCanvas({ engine, onMove, onClick, onRightClick }) {
     canvas.width = MAP_WIDTH * dpr
     canvas.height = MAP_HEIGHT * dpr
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    // Nearest-neighbor, not bilinear: every scaled sprite blit (most enemies —
+    // sprites are baked at a fixed 32x32, entity radii vary) would otherwise
+    // pay for browser-side resampling on top of the draw call itself, on top
+    // of not matching the pixel-art look.
+    ctx.imageSmoothingEnabled = false
 
     const renderer = new GameRenderer()
     const loop = new GameLoop(engine, (eng) => renderer.render(ctx, eng))

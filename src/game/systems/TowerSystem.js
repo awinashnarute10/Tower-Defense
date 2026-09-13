@@ -1,7 +1,13 @@
 const TARGET_REFRESH_SEC = 0.1
 const queryBuffer = []
+// Reused across every target-refresh call instead of a `{ best, bestProgress }`
+// object literal per call — with target caching this is only ~10x/sec per
+// tower, not per frame, but it's still the last remaining per-call allocation
+// in the targeting path, so it's worth closing out.
+let bestCandidate = -1
+let bestCandidateProgress = -Infinity
 
-function considerCandidate(tower, enemyPool, index, state) {
+function considerCandidate(tower, enemyPool, index) {
   const enemy = enemyPool.get(index)
   if (!enemy.active) return
   const dx = enemy.x - tower.x
@@ -10,9 +16,9 @@ function considerCandidate(tower, enemyPool, index, state) {
   if (distSq > tower.range * tower.range) return
   // Prefer the enemy furthest along the path (closest to the base).
   const progress = enemy.waypointIndex * 100000 - distSq
-  if (progress > state.bestProgress) {
-    state.bestProgress = progress
-    state.best = index
+  if (progress > bestCandidateProgress) {
+    bestCandidateProgress = progress
+    bestCandidate = index
   }
 }
 
@@ -20,18 +26,24 @@ function considerCandidate(tower, enemyPool, index, state) {
 function acquireTargetGrid(engine, tower) {
   const { enemyPool, grid } = engine
   grid.queryCircle(tower.x, tower.y, tower.range, queryBuffer)
-  const state = { best: -1, bestProgress: -Infinity }
-  for (let i = 0; i < queryBuffer.length; i++) considerCandidate(tower, enemyPool, queryBuffer[i], state)
-  return state.best
+  bestCandidate = -1
+  bestCandidateProgress = -Infinity
+  for (let i = 0; i < queryBuffer.length; i++) considerCandidate(tower, enemyPool, queryBuffer[i])
+  return bestCandidate
 }
 
 // Baseline path: scan every active enemy on the map (no spatial partitioning) —
 // used by Performance Lab's "Baseline" mode to demonstrate the cost this avoids.
+// Raw indexed loop over the pool's own arrays rather than forEachActive(callback):
+// this is the one targeting path that's O(activeCount), so the per-entity
+// closure-call overhead matters here more than anywhere else in the engine.
 function acquireTargetLinear(engine, tower) {
   const { enemyPool } = engine
-  const state = { best: -1, bestProgress: -Infinity }
-  enemyPool.forEachActive((_enemy, index) => considerCandidate(tower, enemyPool, index, state))
-  return state.best
+  bestCandidate = -1
+  bestCandidateProgress = -Infinity
+  const { activeIndices, activeCount } = enemyPool
+  for (let i = 0; i < activeCount; i++) considerCandidate(tower, enemyPool, activeIndices[i])
+  return bestCandidate
 }
 
 function acquireTarget(engine, tower) {

@@ -23,7 +23,10 @@ export class Enemy {
     this.generation = 0
   }
 
-  reset({ typeId, template, x, y, hp, speed, generation }) {
+  // Positional args, not a config object — this runs on every spawn (up to
+  // hundreds/sec during a stress test), and avoiding an object literal here
+  // and at every call site removes a steady source of GC churn.
+  reset(typeId, template, x, y, hp, speed, generation) {
     this.active = true
     this.typeId = typeId
     this.x = x

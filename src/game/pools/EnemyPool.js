@@ -16,10 +16,10 @@ export class EnemyPool {
     this.slotPosition = new Int32Array(capacity).fill(-1)
   }
 
-  acquire(config) {
+  acquire(typeId, template, x, y, hp, speed) {
     if (this.freeTop === 0) return -1
     const index = this.freeList[--this.freeTop]
-    this.items[index].reset({ ...config, generation: this.generations[index] })
+    this.items[index].reset(typeId, template, x, y, hp, speed, this.generations[index])
     const pos = this.activeCount++
     this.activeIndices[pos] = index
     this.slotPosition[index] = pos

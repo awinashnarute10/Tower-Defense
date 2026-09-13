@@ -4,11 +4,14 @@ export function updateProjectiles(engine, dt) {
   const { projectilePool, enemyPool } = engine
   toRelease.length = 0
 
-  projectilePool.forEachActive((p, index) => {
+  const { items, activeIndices, activeCount } = projectilePool
+  for (let i = 0; i < activeCount; i++) {
+    const index = activeIndices[i]
+    const p = items[index]
     p.life -= dt
     if (p.life <= 0) {
       toRelease.push(index)
-      return
+      continue
     }
 
     p.trailX = p.x
@@ -35,7 +38,7 @@ export function updateProjectiles(engine, dt) {
       // Lost its target — let it fizzle out shortly instead of flying forever.
       p.life = Math.min(p.life, 0.15)
     }
-  })
+  }
 
   for (let i = 0; i < toRelease.length; i++) projectilePool.release(toRelease[i])
 }

@@ -40,14 +40,7 @@ function spawnNext(engine) {
   const template = ENEMY_TEMPLATES[typeId]
   const hp = Math.round(template.hp * rt.data.hpMultiplier)
   const speed = template.speed * rt.data.speedMultiplier
-  engine.enemyPool.acquire({
-    typeId,
-    template,
-    x: SPAWN_POINT.x,
-    y: SPAWN_POINT.y,
-    hp,
-    speed,
-  })
+  engine.enemyPool.acquire(typeId, template, SPAWN_POINT.x, SPAWN_POINT.y, hp, speed)
 }
 
 export function updateWaveSystem(engine, dt) {

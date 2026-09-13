@@ -8,12 +8,18 @@ export function updateEnemyMovement(engine, dt) {
   const { enemyPool, simTime } = engine
   toRelease.length = 0
 
-  enemyPool.forEachActive((enemy, index) => {
+  // Raw indexed loop (not forEachActive(callback)) — this runs for every
+  // active enemy every fixed step, so at 5000 enemies the per-call closure
+  // overhead of a callback-based iterator is worth avoiding here too.
+  const { items, activeIndices, activeCount } = enemyPool
+  for (let i = 0; i < activeCount; i++) {
+    const index = activeIndices[i]
+    const enemy = items[index]
     const target = PATH[enemy.waypointIndex]
     if (!target) {
       engine.onEnemyReachedBase(BASE_DAMAGE[enemy.typeId] ?? 1)
       toRelease.push(index)
-      return
+      continue
     }
     const dx = target.x - enemy.x
     const dy = target.y - enemy.y
@@ -27,7 +33,7 @@ export function updateEnemyMovement(engine, dt) {
       enemy.x += (dx / dist) * step
       enemy.y += (dy / dist) * step
     }
-  })
+  }
 
   for (let i = 0; i < toRelease.length; i++) enemyPool.release(toRelease[i])
 }
@@ -35,16 +41,21 @@ export function updateEnemyMovement(engine, dt) {
 export function rebuildEnemyGrid(engine) {
   const { grid, enemyPool } = engine
   grid.clear()
-  enemyPool.forEachActive((enemy, index) => {
+  const { items, activeIndices, activeCount } = enemyPool
+  for (let i = 0; i < activeCount; i++) {
+    const index = activeIndices[i]
+    const enemy = items[index]
     grid.insert(index, enemy.x, enemy.y)
-  })
+  }
 }
 
 export function applyHealing(engine) {
   const { enemyPool, grid, simTime } = engine
-  enemyPool.forEachActive((healer) => {
-    if (healer.healRadius <= 0) return
-    if (simTime - healer.healTimer < healer.healInterval) return
+  const { items, activeIndices, activeCount } = enemyPool
+  for (let h = 0; h < activeCount; h++) {
+    const healer = items[activeIndices[h]]
+    if (healer.healRadius <= 0) continue
+    if (simTime - healer.healTimer < healer.healInterval) continue
     healer.healTimer = simTime
     grid.queryCircle(healer.x, healer.y, healer.healRadius, queryBuffer)
     for (let i = 0; i < queryBuffer.length; i++) {
@@ -56,5 +67,5 @@ export function applyHealing(engine) {
         ally.hp = Math.min(ally.maxHp, ally.hp + healer.healAmount)
       }
     }
-  })
+  }
 }

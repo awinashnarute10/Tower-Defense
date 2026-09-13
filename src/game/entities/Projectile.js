@@ -17,7 +17,8 @@ export class Projectile {
     this.trailY = 0
   }
 
-  reset({ x, y, speed, damage, kind, color, targetId, targetGeneration, slow, slowDuration, splashRadius }) {
+  // Positional args, not a config object — see the note on Enemy.reset().
+  reset(x, y, speed, damage, kind, color, targetId, targetGeneration, slow, slowDuration, splashRadius) {
     this.active = true
     this.x = x
     this.y = y
@@ -29,9 +30,11 @@ export class Projectile {
     this.color = color
     this.targetId = targetId
     this.targetGeneration = targetGeneration
-    this.slow = slow
+    this.slow = slow ?? null
     this.slowDuration = slowDuration || 0
     this.splashRadius = splashRadius || 0
     this.life = 2.5
+    this.dirX = undefined
+    this.dirY = undefined
   }
 }
