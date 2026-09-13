@@ -2,7 +2,7 @@ import { MAP_WIDTH, MAP_HEIGHT, PATH, PATH_WIDTH, SPAWN_POINT, BASE_POINT } from
 import { TOWER_TEMPLATES } from '../data/towers.js'
 import { SpriteCache, ENEMY_BITMAP } from './SpriteCache.js'
 
-function bakeBackground() {
+export function bakeBackground() {
   const canvas = document.createElement('canvas')
   canvas.width = MAP_WIDTH
   canvas.height = MAP_HEIGHT

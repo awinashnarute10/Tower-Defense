@@ -18,6 +18,8 @@ function App() {
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot)
   const [showPerf, setShowPerf] = useState(false)
+  const [backend, setBackend] = useState('canvas2d')
+  const [activeBackend, setActiveBackend] = useState('canvas2d')
 
   const inPlay = snapshot.status === 'playing' || snapshot.status === 'paused'
 
@@ -60,6 +62,8 @@ function App() {
           <div className="relative w-full h-full max-w-[1280px] max-h-[720px] mx-auto aspect-video" style={{ minWidth: 0 }}>
             <GameCanvas
               engine={engine}
+              backend={backend}
+              onRendererReady={setActiveBackend}
               onMove={handleCanvasMove}
               onClick={handleCanvasClick}
               onRightClick={handleCanvasRightClick}
@@ -90,7 +94,7 @@ function App() {
 
             {inPlay && showPerf && (
               <div className="absolute bottom-3 right-3 bg-[var(--retro-panel)]/95 border-2 border-[var(--retro-border)] rounded p-3 z-10">
-                <PerformancePanel snapshot={snapshot} lab={false} />
+                <PerformancePanel snapshot={snapshot} lab={false} activeBackend={activeBackend} backend={backend} onSetBackend={setBackend} />
               </div>
             )}
           </div>
@@ -131,6 +135,9 @@ function App() {
               onSetStressConfig={(cfg) => engine.setStressConfig(cfg)}
               onApplyPreset={(mode) => (mode === 'baseline' ? engine.applyBaselineMode() : engine.applyOptimizedMode())}
               onExit={() => engine.goToMenu()}
+              activeBackend={activeBackend}
+              backend={backend}
+              onSetBackend={setBackend}
             />
           </aside>
         )}

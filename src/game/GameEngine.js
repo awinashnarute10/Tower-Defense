@@ -82,6 +82,8 @@ export class GameEngine {
       frameTimeMs: perf.frameTimeMs,
       p95Ms: perf.p95Ms,
       pctOver33: perf.pctOver33,
+      updateMs: Math.round(this.timing.updateMs * 100) / 100,
+      renderMs: Math.round(this.timing.renderMs * 100) / 100,
       flags: this.flags,
       placementTypeId: this.placement.typeId,
       selectedTower: this._describeSelectedTower(),

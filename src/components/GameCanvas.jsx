@@ -1,32 +1,60 @@
 import { useEffect, useRef } from 'react'
-import { GameRenderer } from '../rendering/GameRenderer.js'
 import { GameLoop } from '../game/GameLoop.js'
+import { CanvasRenderer } from '../rendering/renderers/CanvasRenderer.js'
 import { MAP_WIDTH, MAP_HEIGHT } from '../data/map.js'
 
-export default function GameCanvas({ engine, onMove, onClick, onRightClick }) {
-  const canvasRef = useRef(null)
+export default function GameCanvas({ engine, backend, onRendererReady, onMove, onClick, onRightClick }) {
+  const containerRef = useRef(null)
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
-    canvas.width = MAP_WIDTH * dpr
-    canvas.height = MAP_HEIGHT * dpr
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    // Nearest-neighbor, not bilinear: every scaled sprite blit (most enemies —
-    // sprites are baked at a fixed 32x32, entity radii vary) would otherwise
-    // pay for browser-side resampling on top of the draw call itself, on top
-    // of not matching the pixel-art look.
-    ctx.imageSmoothingEnabled = false
+    let cancelled = false
+    let renderer = null
+    let loop = null
+    const container = containerRef.current
 
-    const renderer = new GameRenderer()
-    const loop = new GameLoop(engine, (eng) => renderer.render(ctx, eng))
-    loop.start()
-    return () => loop.stop()
-  }, [engine])
+    async function mount() {
+      let active
+      try {
+        if (backend === 'webgl') {
+          // Dynamic import: Canvas2D-only sessions never pay for Pixi's bundle
+          // weight (it's a substantial library — see the code-splitting note
+          // in ARCHITECTURE.md).
+          const { WebGLRenderer } = await import('../rendering/renderers/WebGLRenderer.js')
+          active = new WebGLRenderer()
+        } else {
+          active = new CanvasRenderer()
+        }
+        if (cancelled) return
+        await active.init(container)
+      } catch (err) {
+        // Never claim a backend is active when it isn't — fall back to
+        // Canvas2D and let the UI reflect what's actually running.
+        console.warn('[GameCanvas] renderer init failed, falling back to canvas2d:', err)
+        if (cancelled) return
+        active = new CanvasRenderer()
+        await active.init(container)
+      }
+      if (cancelled) {
+        active.destroy()
+        return
+      }
+      renderer = active
+      onRendererReady?.(renderer.name)
+      loop = new GameLoop(engine, (eng) => renderer.render(eng))
+      loop.start()
+    }
+
+    mount()
+
+    return () => {
+      cancelled = true
+      loop?.stop()
+      renderer?.destroy()
+    }
+  }, [engine, backend, onRendererReady])
 
   function toWorld(e) {
-    const rect = canvasRef.current.getBoundingClientRect()
+    const rect = containerRef.current.getBoundingClientRect()
     return {
       x: ((e.clientX - rect.left) / rect.width) * MAP_WIDTH,
       y: ((e.clientY - rect.top) / rect.height) * MAP_HEIGHT,
@@ -34,8 +62,8 @@ export default function GameCanvas({ engine, onMove, onClick, onRightClick }) {
   }
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
+      ref={containerRef}
       className="w-full h-full"
       onMouseMove={(e) => onMove(toWorld(e))}
       onClick={(e) => onClick(toWorld(e))}
