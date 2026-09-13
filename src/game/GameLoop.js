@@ -32,14 +32,24 @@ export class GameLoop {
 
     this.accumulator += rawDeltaSec * this.engine.state.gameSpeed
     let steps = 0
+    const updateStart = performance.now()
     while (this.accumulator >= FIXED_DT && steps < MAX_SUBSTEPS) {
       this.engine.update(FIXED_DT)
       this.accumulator -= FIXED_DT
       steps++
     }
     if (steps === MAX_SUBSTEPS) this.accumulator = 0
+    const updateMs = performance.now() - updateStart
 
+    const renderStart = performance.now()
     this.render(this.engine)
+    const renderMs = performance.now() - renderStart
+
+    // Exponential moving average — cheap running breakdown for the Performance
+    // Lab / README, not a precise profiler.
+    const t = this.engine.timing
+    t.updateMs += (updateMs - t.updateMs) * 0.1
+    t.renderMs += (renderMs - t.renderMs) * 0.1
 
     this.uiTimer += rawDeltaSec
     if (this.uiTimer >= UI_PUBLISH_INTERVAL) {

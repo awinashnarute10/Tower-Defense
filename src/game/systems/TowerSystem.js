@@ -4,10 +4,12 @@ const queryBuffer = []
 function considerCandidate(tower, enemyPool, index, state) {
   const enemy = enemyPool.get(index)
   if (!enemy.active) return
-  const dist = Math.hypot(enemy.x - tower.x, enemy.y - tower.y)
-  if (dist > tower.range) return
+  const dx = enemy.x - tower.x
+  const dy = enemy.y - tower.y
+  const distSq = dx * dx + dy * dy
+  if (distSq > tower.range * tower.range) return
   // Prefer the enemy furthest along the path (closest to the base).
-  const progress = enemy.waypointIndex * 100000 - dist
+  const progress = enemy.waypointIndex * 100000 - distSq
   if (progress > state.bestProgress) {
     state.bestProgress = progress
     state.best = index
@@ -41,8 +43,9 @@ function isTargetValid(engine, tower) {
   const { enemyPool } = engine
   if (!enemyPool.isCurrent(tower.targetId, tower.targetGeneration)) return false
   const enemy = enemyPool.get(tower.targetId)
-  const dist = Math.hypot(enemy.x - tower.x, enemy.y - tower.y)
-  return dist <= tower.range
+  const dx = enemy.x - tower.x
+  const dy = enemy.y - tower.y
+  return dx * dx + dy * dy <= tower.range * tower.range
 }
 
 export function updateTowers(engine, dt) {

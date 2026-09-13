@@ -1,5 +1,6 @@
 const HIT_MARGIN = 6
 const queryBuffer = []
+const toRelease = []
 
 function killIfDead(engine, enemy, index) {
   if (enemy.hp > 0) return false
@@ -20,24 +21,28 @@ function damageEnemy(engine, index, amount, color) {
 
 export function resolveCollisions(engine) {
   const { projectilePool, enemyPool, grid } = engine
-  const toRelease = []
+  toRelease.length = 0
 
   projectilePool.forEachActive((p, index) => {
     if (!enemyPool.isCurrent(p.targetId, p.targetGeneration)) return
     const enemy = enemyPool.get(p.targetId)
-    const dist = Math.hypot(enemy.x - p.x, enemy.y - p.y)
-    if (dist > enemy.radius + HIT_MARGIN) return
+    const hitDx = enemy.x - p.x
+    const hitDy = enemy.y - p.y
+    const hitRadius = enemy.radius + HIT_MARGIN
+    if (hitDx * hitDx + hitDy * hitDy > hitRadius * hitRadius) return
 
     toRelease.push(index)
 
     if (p.kind === 'splash' && p.splashRadius > 0) {
       grid.queryCircle(p.x, p.y, p.splashRadius, queryBuffer)
+      const splashSq = p.splashRadius * p.splashRadius
       for (let i = 0; i < queryBuffer.length; i++) {
         const otherIndex = queryBuffer[i]
         const other = enemyPool.get(otherIndex)
         if (!other.active) continue
-        const d = Math.hypot(other.x - p.x, other.y - p.y)
-        if (d <= p.splashRadius) damageEnemy(engine, otherIndex, p.damage, p.color)
+        const dx = other.x - p.x
+        const dy = other.y - p.y
+        if (dx * dx + dy * dy <= splashSq) damageEnemy(engine, otherIndex, p.damage, p.color)
       }
     } else {
       damageEnemy(engine, p.targetId, p.damage, p.color)

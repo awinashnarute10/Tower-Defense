@@ -67,6 +67,7 @@ export class GameRenderer {
     this.background = bakeBackground()
     this.sprites = new SpriteCache()
     this.hoverCol = -1
+    this._visibleProjectiles = []
   }
 
   render(ctx, engine) {
@@ -147,10 +148,14 @@ export class GameRenderer {
       if (enemy.x < -60 || enemy.x > MAP_WIDTH + 60 || enemy.y < -60 || enemy.y > MAP_HEIGHT + 60) return
 
       const size = enemy.radius * 2.6
+      // Snap to whole pixels: fits the pixel-art look and lets the browser do a
+      // cheaper unfiltered blit instead of resampling a sub-pixel-positioned sprite.
+      const drawX = Math.round(enemy.x - size / 2)
+      const drawY = Math.round(enemy.y - size / 2)
       if (flags.spriteCache) {
         const bitmapKey = ENEMY_BITMAP[enemy.typeId]
         const sprite = this.sprites.getEnemySprite(enemy.typeId, bitmapKey, enemy.color, enemy.outline)
-        ctx.drawImage(sprite, enemy.x - size / 2, enemy.y - size / 2, size, size)
+        ctx.drawImage(sprite, drawX, drawY, size, size)
       } else {
         // Baseline path: rebuild a fresh gradient and stroke every entity every
         // frame instead of blitting a pre-baked sprite — the cost the cache avoids.
@@ -175,31 +180,40 @@ export class GameRenderer {
         ctx.globalAlpha = 1
       }
 
-      const barW = size
-      const pct = Math.max(0, enemy.hp / enemy.maxHp)
-      ctx.fillStyle = '#1c1630'
-      ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW, 4)
-      ctx.fillStyle = pct > 0.5 ? '#4cff6a' : pct > 0.2 ? '#ffe14c' : '#ff4c5c'
-      ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW * pct, 4)
+      // Skip the HP bar entirely at full health — avoids two fillRect calls per
+      // untouched enemy, which matters when thousands are on screen at once.
+      if (enemy.hp < enemy.maxHp) {
+        const barW = size
+        const pct = Math.max(0, enemy.hp / enemy.maxHp)
+        ctx.fillStyle = '#1c1630'
+        ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW, 4)
+        ctx.fillStyle = pct > 0.5 ? '#4cff6a' : pct > 0.2 ? '#ffe14c' : '#ff4c5c'
+        ctx.fillRect(enemy.x - barW / 2, enemy.y - size / 2 - 8, barW * pct, 4)
+      }
     })
   }
 
   _drawProjectiles(ctx, engine) {
     const { projectilePool } = engine
+    // Single pass: one batched trail path (one stroke call for every projectile)
+    // plus the sprite blits, instead of iterating the pool twice.
     ctx.beginPath()
+    const toDraw = this._visibleProjectiles
+    toDraw.length = 0
     projectilePool.forEachActive((p) => {
       ctx.moveTo(p.trailX, p.trailY)
       ctx.lineTo(p.x, p.y)
+      if (p.x >= -20 && p.x <= MAP_WIDTH + 20 && p.y >= -20 && p.y <= MAP_HEIGHT + 20) toDraw.push(p)
     })
     ctx.strokeStyle = 'rgba(255,255,255,0.35)'
     ctx.lineWidth = 2
     ctx.stroke()
 
-    projectilePool.forEachActive((p) => {
-      if (p.x < -20 || p.x > MAP_WIDTH + 20 || p.y < -20 || p.y > MAP_HEIGHT + 20) return
+    for (let i = 0; i < toDraw.length; i++) {
+      const p = toDraw[i]
       const sprite = this.sprites.getProjectileSprite(p.color)
-      ctx.drawImage(sprite, p.x - 8, p.y - 8, 16, 16)
-    })
+      ctx.drawImage(sprite, Math.round(p.x - 8), Math.round(p.y - 8), 16, 16)
+    }
   }
 
   _drawEffects(ctx, engine) {

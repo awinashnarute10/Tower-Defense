@@ -1,6 +1,8 @@
+const toRelease = []
+
 export function updateProjectiles(engine, dt) {
   const { projectilePool, enemyPool } = engine
-  const toRelease = []
+  toRelease.length = 0
 
   projectilePool.forEachActive((p, index) => {
     p.life -= dt
@@ -18,7 +20,7 @@ export function updateProjectiles(engine, dt) {
       const enemy = enemyPool.get(p.targetId)
       dx = enemy.x - p.x
       dy = enemy.y - p.y
-      const dist = Math.hypot(dx, dy) || 1
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1
       p.dirX = dx / dist
       p.dirY = dy / dist
     } else if (p.dirX === undefined) {

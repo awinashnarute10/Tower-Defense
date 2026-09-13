@@ -41,6 +41,7 @@ export class GameEngine {
     this.waveRuntime = { data: null, spawnQueue: [], spawnTimer: 0, intermission: 0 }
     this.flags = { spatialGrid: true, targetCache: true, spriteCache: true }
     this.stressConfig = { enemies: 0, towers: 0, projectiles: 0 }
+    this.timing = { updateMs: 0, renderMs: 0 }
     this.placement = { typeId: null, col: -1, row: -1, x: 0, y: 0, valid: false }
     this.selectedTowerId = null
     this.listeners = new Set()

@@ -2,10 +2,11 @@ import { PATH } from '../../data/map.js'
 
 const BASE_DAMAGE = { grunt: 1, runner: 1, healer: 1, tank: 3, boss: 10 }
 const queryBuffer = []
+const toRelease = []
 
 export function updateEnemyMovement(engine, dt) {
   const { enemyPool, simTime } = engine
-  const toRelease = []
+  toRelease.length = 0
 
   enemyPool.forEachActive((enemy, index) => {
     const target = PATH[enemy.waypointIndex]
@@ -16,7 +17,7 @@ export function updateEnemyMovement(engine, dt) {
     }
     const dx = target.x - enemy.x
     const dy = target.y - enemy.y
-    const dist = Math.hypot(dx, dy)
+    const dist = Math.sqrt(dx * dx + dy * dy)
     const step = enemy.currentSpeed(simTime) * dt
     if (step >= dist || dist === 0) {
       enemy.x = target.x
@@ -49,8 +50,9 @@ export function applyHealing(engine) {
     for (let i = 0; i < queryBuffer.length; i++) {
       const ally = enemyPool.get(queryBuffer[i])
       if (!ally.active || ally === healer) continue
-      const dist = Math.hypot(ally.x - healer.x, ally.y - healer.y)
-      if (dist <= healer.healRadius) {
+      const dx = ally.x - healer.x
+      const dy = ally.y - healer.y
+      if (dx * dx + dy * dy <= healer.healRadius * healer.healRadius) {
         ally.hp = Math.min(ally.maxHp, ally.hp + healer.healAmount)
       }
     }

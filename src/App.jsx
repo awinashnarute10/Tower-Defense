@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { GameEngine } from './game/GameEngine.js'
 import GameCanvas from './components/GameCanvas.jsx'
 import HUD from './components/HUD.jsx'
@@ -12,6 +12,9 @@ import PerformancePanel from './components/PerformancePanel.jsx'
 
 function App() {
   const [engine] = useState(() => new GameEngine())
+  useEffect(() => {
+    if (import.meta.env.DEV) window.__engine = engine
+  }, [engine])
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot)
   const [showPerf, setShowPerf] = useState(false)
@@ -24,11 +27,20 @@ function App() {
 
   function handleCanvasClick(pos) {
     if (snapshot.status !== 'playing') return
+    // Clicking an existing tower always selects it, even while a shop tower
+    // type is active — otherwise the click just silently fails to place on
+    // the occupied cell and the player can never reach the upgrade panel.
+    const existingId = engine.pickTowerAt(pos.x, pos.y)
+    if (existingId !== null) {
+      engine.setPlacementType(null)
+      engine.setSelectedTower(existingId)
+      return
+    }
     if (snapshot.placementTypeId) {
       engine.updateHover(pos.x, pos.y)
       engine.tryPlaceTower()
     } else {
-      engine.setSelectedTower(engine.pickTowerAt(pos.x, pos.y))
+      engine.setSelectedTower(null)
     }
   }
 
@@ -44,8 +56,8 @@ function App() {
       )}
 
       <div className="flex-1 flex relative min-h-0">
-        <div className="relative flex-1 flex items-center justify-center bg-black">
-          <div className="relative w-full h-full max-w-[1280px] max-h-[720px] mx-auto aspect-video">
+        <div className="relative flex-1 min-w-0 flex items-center justify-center bg-black">
+          <div className="relative w-full h-full max-w-[1280px] max-h-[720px] mx-auto aspect-video" style={{ minWidth: 0 }}>
             <GameCanvas
               engine={engine}
               onMove={handleCanvasMove}
